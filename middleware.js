@@ -52,53 +52,33 @@
 //     "/(api|trpc)(.*)",
 //   ],
 // };
-// middleware.js
-import arcjet, { createMiddleware, detectBot, shield } from "@arcjet/next";
-import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
+// middleware.js (minimal, Clerk-only)
+// middleware.js (Optimized for Vercel Edge, Clerk-only)
+import { clerkMiddleware } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 
-// Define protected routes
-const isProtectedRoute = createRouteMatcher([
-  "/dashboard(.*)",
-  "/account(.*)",
-  "/transaction(.*)",
-]);
+// List of top-level paths that require authentication
+const protectedPaths = ["/dashboard", "/account", "/transaction"];
 
-// ArcJet middleware for bot detection & protection
-const aj = arcjet({
-  key: process.env.ARCJET_KEY,
-  rules: [
-    shield({ mode: "LIVE" }),
-    detectBot({
-      mode: "LIVE", // Block bots in LIVE mode
-      allow: [
-        "CATEGORY:SEARCH_ENGINE", // Google, Bing, etc.
-        "GO_HTTP", // Inngest
-      ],
-    }),
-  ],
-});
-
-// Clerk middleware
-const clerk = clerkMiddleware(async (auth, req) => {
+export default clerkMiddleware(async (auth, req) => {
   const { userId, redirectToSignIn } = await auth();
 
-  // Redirect if user is not logged in and route is protected
-  if (!userId && isProtectedRoute(req)) {
+  // Extract the pathname from the request URL
+  const { pathname } = new URL(req.url);
+
+  // Check if the requested path is protected
+  const isProtected = protectedPaths.some((p) => pathname.startsWith(p));
+
+  if (!userId && isProtected) {
+    // Redirect to Clerk sign-in page if not logged in
     return redirectToSignIn();
   }
 
+  // Allow request to continue if logged in or route is not protected
   return NextResponse.next();
 });
 
-// Chain middlewares: ArcJet first, then Clerk
-export default createMiddleware(aj, clerk);
-
-// Apply middleware to all routes except Next.js internals & static files
 export const config = {
-  matcher: [
-    "/((?!_next|favicon.ico|robots.txt|manifest.json).*)",
-    "/api/:path*",
-  ],
+  // Apply middleware only to protected routes to reduce bundle size
+  matcher: ["/dashboard/:path*", "/account/:path*", "/transaction/:path*"],
 };
-
