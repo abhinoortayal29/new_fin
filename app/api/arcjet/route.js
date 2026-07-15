@@ -1,19 +1,48 @@
-// app/api/arcjet/route.js  (server-side - not an edge)
+import arcjet, {
+  detectBot,
+  shield,
+} from "@arcjet/next";
 import { NextResponse } from "next/server";
-import arcjet from "@arcjet/next"; // safe to import on server
+
+const arcjetKey = process.env.ARCJET_KEY;
+
+if (!arcjetKey) {
+  throw new Error("ARCJET_KEY is not defined");
+}
 
 const aj = arcjet({
-  key: process.env.ARCJET_KEY,
+  key: arcjetKey,
   rules: [
-    // same rules you used previously
+    shield({
+      mode: "LIVE",
+    }),
+
+    detectBot({
+      mode: "LIVE",
+      allow: [
+        "CATEGORY:SEARCH_ENGINE",
+        "GO_HTTP",
+      ],
+    }),
   ],
 });
 
 export async function POST(req) {
-  // Example: forward request info to Arcjet and return result
-  // (Implement based on arcjet server API)
-  // This is a placeholder — use arcjet docs to call detection APIs inside server.
-  const body = await req.json();
-  const result = await aj.analyze?.(body) ?? { ok: true }; // replace with real API
-  return NextResponse.json(result);
+  const decision = await aj.protect(req);
+
+  if (decision.isDenied()) {
+    return NextResponse.json(
+      {
+        error: "Forbidden",
+      },
+      {
+        status: 403,
+      }
+    );
+  }
+
+  return NextResponse.json({
+    ok: true,
+    message: "Request allowed by Arcjet",
+  });
 }
