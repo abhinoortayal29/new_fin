@@ -63,6 +63,7 @@ model Transaction {
   @@index([userId])
   @@index([accountId])
   @@map("transactions")
+    @@index([isRecurring, status, nextRecurringDate])
 }
 
 model Budget {
